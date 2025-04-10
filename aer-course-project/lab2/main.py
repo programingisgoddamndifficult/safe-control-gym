@@ -61,6 +61,22 @@ def run(test=False):
     # Reset the environment, obtain the initial observations and info dictionary.
     obs, info = env.reset()
 
+    # Add obstacle IDs manually by loading obstacles from nominal positions
+    obstacle_ids = []
+    obstacle_positions = info["nominal_obstacles_pos"]
+    obstacle_urdf = "D:\\safe-control-gym\\safe-control-gym\\safe_control_gym\\envs\\gym_pybullet_drones\\assets\\obstacle.urdf"  # <-- 根据实际项目路径修改
+
+    num_bodies = p.getNumBodies(physicsClientId=env.PYB_CLIENT)
+    for i in range(num_bodies):
+        body_id = p.getBodyUniqueId(i, physicsClientId=env.PYB_CLIENT)
+        print(f"Body {i}: ID = {body_id}, pos = {p.getBasePositionAndOrientation(body_id)}")
+        obstacle_ids.append(body_id)
+        # print("!!!obstacle_ids: ",obstacle_ids)
+
+    # Save IDs and client ID to info
+    info["obstacle_ids"] = obstacle_ids
+    info["pyb_client"] = env.PYB_CLIENT
+
     # Create controller.
     # [INSTRUCTIONS:] 
     # vicon_obs indicates the initial observation (initial state) from Vicon.
@@ -142,6 +158,8 @@ def run(test=False):
             done = False
             info = {}
             first_ep_iteration = False
+        
+
         # Get reference pos, vel, acc from the circle trajectory
         target_pos, target_vel, target_acc = ctrl.getRef(curr_time, obs, reward, done, info)
         # TODO: implement the geometric controller in the computeAction function

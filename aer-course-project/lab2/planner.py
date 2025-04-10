@@ -66,6 +66,22 @@ class Controller():
         # 执行轨迹规划
         self.planning(initial_info)
 
+        # 添加障碍物ID存储
+        self.obstacle_ids = initial_info.get("obstacle_ids", [])  # 存储障碍物的物体ID
+        self.pyb_client = initial_info["pyb_client"]  # 保存PyBullet客户端ID
+    
+    #实时获取所有障碍物的当前位置
+    def get_obstacle_positions(self):
+        """实时获取所有障碍物的当前位置"""
+        current_obstacles = []
+        # print("!!!!obstacle_ids: ",self.obstacle_ids)
+        for obstacle_id in self.obstacle_ids:
+            # 获取障碍物的位置和朝向
+            pos, _ = p.getBasePositionAndOrientation(obstacle_id, physicsClientId=self.pyb_client)
+            current_obstacles.append(pos)
+            print("current position:",pos)
+        return current_obstacles
+    
     def planning(self, initial_info):
         """轨迹规划主函数，绘制参考圆形轨迹"""
         # 绘制内外两个边界圆
@@ -209,6 +225,10 @@ class Controller():
         # 初始化避障向量
         avoidance_vector = np.zeros(3)
         
+        ############ 在每次获取参考轨迹时，更新障碍物位置
+        self.obstacles = self.get_obstacle_positions()  # 更新为实时位置
+        ############ 在每次获取参考轨迹时，更新障碍物位置
+
         # 障碍物检测与避障向量计算
         for obstacle in self.obstacles:
             obstacle_pos = np.array(obstacle[:3])  # 障碍物位置
@@ -222,9 +242,9 @@ class Controller():
                 strength = self.avoidance_distance / (dist + 1e-6)
                 # 累加避障向量
                 avoidance_vector += direction * strength * self.avoidance_strength
-                print("!!!!!!!!!Collision Warning!!!!!!!!!!")
-                print("!!!!!!!!!Collision Warning!!!!!!!!!!")
-                print("!!!!!!!!!Collision Warning!!!!!!!!!!")
+                # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
+                # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
+                # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
         
         # 合成最终目标位置(标准位置+避障偏移)
         target_p = nominal_pos + avoidance_vector
