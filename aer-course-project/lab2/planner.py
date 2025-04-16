@@ -27,7 +27,13 @@ class Controller():
             buffer_size: 数据缓冲区大小
             verbose: 是否打印调试信息
         """
-        
+        ################################## 添加轨迹绘制相关变量
+        self.trajectory_points = []  # 存储轨迹点
+        self.last_position = None  # 存储上一帧位置
+        self.trajectory_id = None  # 轨迹线的ID（用于更新）
+        self.trajectory_color = [0, 1, 0]  # 轨迹颜色（绿色）
+        self.trajectory_width = 2  # 轨迹线宽
+
         # 从配置中读取控制参数
         self.tolerance = initial_info["position_tolerance"]  # 位置容差
         self.k_p = initial_info["k_p"]  # P控制参数
@@ -171,7 +177,50 @@ class Controller():
             target_vel=target_v,  # 目标速度
             target_acc=target_a  # 目标加速度
         )
+        # 记录当前位置到轨迹
+        current_pos = [obs[0], obs[2], obs[4]]
+        self._update_trajectory(current_pos)
+
         return self.KF * rpms**2, pos_e  # 返回电机控制量和位置误差
+
+    #################################
+    def _update_trajectory(self, current_pos):
+        """更新并绘制轨迹"""
+        # 如果是第一帧，只记录位置不绘制
+        if self.last_position is None:
+            self.last_position = current_pos
+            return
+            
+        # 添加新的轨迹点
+        self.trajectory_points.append(current_pos)
+        
+        # 如果轨迹线已存在，先移除旧的（处理多个线段的情况）
+        if self.trajectory_id is not None:
+            if isinstance(self.trajectory_id, list):  # 如果是多条线段
+                for line_id in self.trajectory_id:   # 遍历删除每条线段
+                    p.removeUserDebugItem(line_id, physicsClientId=self.pyb_client)
+            else:  # 如果是单条线段
+                p.removeUserDebugItem(self.trajectory_id, physicsClientId=self.pyb_client)
+            
+        # 绘制新的轨迹线（只保留最后N个点以提高性能）
+        max_points = 100  # 最大显示点数
+        points_to_draw = self.trajectory_points[-max_points:]
+        
+        if len(points_to_draw) > 1:
+            # 使用线段连接所有点
+            line_ids = []
+            for i in range(len(points_to_draw)-1):
+                line_id = p.addUserDebugLine(
+                    lineFromXYZ=points_to_draw[i],
+                    lineToXYZ=points_to_draw[i+1],
+                    lineColorRGB=self.trajectory_color,
+                    lineWidth=self.trajectory_width,
+                    physicsClientId=self.pyb_client
+                )
+                line_ids.append(line_id)
+            self.trajectory_id = line_ids  # 存储所有线段ID
+            
+        self.last_position = current_pos
 
     def getRef(self, time, obs, reward=None, done=None, info=None):
         """
@@ -243,8 +292,7 @@ class Controller():
                 # 累加避障向量
                 avoidance_vector += direction * strength * self.avoidance_strength
                 # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
-                # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
-                # print("!!!!!!!!!Collision Warning!!!!!!!!!!")
+
         
         # 合成最终目标位置(标准位置+避障偏移)
         target_p = nominal_pos + avoidance_vector
@@ -265,6 +313,20 @@ class Controller():
         # 重置计数器
         self.interstep_counter = 0  # 步间计数器
         self.interepisode_counter = 0  # 回合间计数器
+
+        """重置时清除轨迹"""
+        # 清除现有轨迹
+        if self.trajectory_id is not None:
+            if isinstance(self.trajectory_id, list):
+                for line_id in self.trajectory_id:
+                    p.removeUserDebugItem(line_id, physicsClientId=self.pyb_client)
+            else:
+                p.removeUserDebugItem(self.trajectory_id, physicsClientId=self.pyb_client)
+                
+        # 重置轨迹记录
+        self.trajectory_points = []
+        self.last_position = None
+        self.trajectory_id = None
 
     def interEpisodeReset(self):
         """重置学习相关计时变量"""
